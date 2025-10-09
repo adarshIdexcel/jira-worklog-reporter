@@ -1,0 +1,2 @@
+# This folder contains generated Excel reports from the Jira Work Log Fetcher
+# Reports are automatically generated with format: {GroupName/UserName}_{YYYY-MM-DD}_{HH-MM-SS}.xlsx

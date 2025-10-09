@@ -1,0 +1,21 @@
+{
+  "name": "jira-worklog-fetcher",
+  "version": "1.0.0",
+  "description": "Standalone script to fetch Jira work logs for users/groups",
+  "type": "module",
+  "main": "jira-worklog-fetcher.js",
+  "scripts": {
+    "start": "node jira-worklog-fetcher.js",
+    "fetch": "node jira-worklog-fetcher.js"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "keywords": [
+    "jira",
+    "worklog",
+    "reporting"
+  ],
+  "author": "",
+  "license": "ISC"
+}
