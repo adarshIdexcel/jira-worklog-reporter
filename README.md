@@ -113,9 +113,9 @@ Open `jira-worklog-fetcher.js` and look for the `CONFIG` section:
 
 ---
 
-## 📞 Need Help?
+## Help
 
-Contact the DevOps/Platform team or check the technical documentation in `RATE-LIMITS.md`
+Check the technical documentation in `RATE-LIMITS.md`
 
 ---
 
@@ -237,19 +237,10 @@ The script also saves a detailed JSON report to `jira-worklogs-report.json`:
 | `useCurrentUser` | boolean | Use current user instead of group | `true` |
 | `startDate` | string | Start date (YYYY-MM-DD) | 30 days ago |
 | `endDate` | string | End date (YYYY-MM-DD) | Today |
-| `timezone` | string | Timezone for dates | `'Asia/Kolkata'` |
 | `maxResultsPerPage` | number | Pagination size | `100` |
 | `saveToFile` | boolean | Save JSON report to file | `true` |
 | `outputFileName` | string | Output file name | `'jira-worklogs-report.json'` |
 
-## 🔐 Getting Your Jira API Token
-
-1. Go to: https://id.atlassian.com/manage-profile/security/api-tokens
-2. Click **"Create API token"**
-3. Give it a label (e.g., "Work Log Fetcher")
-4. Copy the token and paste it in the `CONFIG.apiToken` field
-
-⚠️ **Security Note:** Never commit your API token to version control!
 
 ## 🐛 Troubleshooting
 
@@ -283,6 +274,3 @@ The script also saves a detailed JSON report to `jira-worklogs-report.json`:
 - Pagination is handled automatically for large result sets
 - All times are displayed in both human-readable format (e.g., "3h 30m") and decimal hours
 
-## 🤝 Support
-
-For issues or questions, please refer to the Jira API documentation or check the error messages in the console output.
