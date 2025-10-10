@@ -43,24 +43,33 @@ const CONFIG = {
 
   // Filter criteria - Choose ONE of the following:
   // Option 1: Specific user by email
-  specificUserEmail: "<email>",  // e.g., 'john.doe@idexcel.com' or null
+  specificUserEmail: null,  // e.g., 'john.doe@idexcel.com' or null
   
   // Option 2: Team/Group
-  groupName: null,  // e.g., 'AWS Team' or null
+  groupName: "AWS Team",  // e.g., 'AWS Team' or null
   
   // Option 3: Current authenticated user
   useCurrentUser: false,  // Set to true to fetch only your own worklogs
   
   // Date range (ISO format YYYY-MM-DD or Date objects)
-  // Default: Last 30 days
-  startDate: getDateDaysAgo(30),  // 30 days ago
+  // Default: Last 30 days - increase if you need more coverage
+  startDate: getDateDaysAgo(60),  // 60 days ago (increased from 30)
   endDate: getDateDaysAgo(0),     // Today
   
   // Timezone for date conversion
   timezone: 'Asia/Kolkata',  // IST timezone
   
   // Pagination
-  maxResultsPerPage: 100,
+  maxResultsPerPage: 500,
+  maxIssuesToProcess: 3000,  // Increased for larger groups (60 people, 2500+ tickets)
+  maxWorklogsPerIssue: 10000, // Safety limit for issues with excessive worklogs
+  
+  // Batch Processing (for groups only)
+  enableBatchProcessing: true,      // Enable batch processing for large groups
+  batchSize: 200,                   // Issues per batch (for groups)
+  batchDelayMs: 1000,               // Delay between batches (1 second)
+  maxRetries: 3,                    // Max retries for failed API calls
+  retryDelayMs: 2000,               // Base delay for retry (2 seconds)
   
   // Output options
   outputFormat: 'console',  // 'console' or 'json'
@@ -188,6 +197,75 @@ async function jiraRequest(endpoint, options = {}) {
   return response.json();
 }
 
+/**
+ * Make authenticated request to Jira API with retry logic and rate limit handling
+ */
+async function jiraRequestWithRetry(endpoint, options = {}, retryCount = 0) {
+  try {
+    const url = `${CONFIG.jiraBaseUrl}${endpoint}`;
+    
+    // Track API call
+    STATS.apiCalls++;
+    
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Authorization': getAuthHeader(),
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    });
+    
+    // Check rate limit headers
+    const rateLimitRemaining = response.headers.get('X-RateLimit-Remaining');
+    const rateLimitReset = response.headers.get('X-RateLimit-Reset');
+    
+    if (rateLimitRemaining && parseInt(rateLimitRemaining) < 10) {
+      console.log(`   ⚠️  Low rate limit: ${rateLimitRemaining} requests remaining`);
+    }
+    
+    // Handle rate limiting
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After');
+      const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : CONFIG.retryDelayMs * Math.pow(2, retryCount);
+      
+      if (retryCount < CONFIG.maxRetries) {
+        console.log(`   🔄 Rate limit hit. Retrying after ${waitTime/1000}s... (attempt ${retryCount + 1}/${CONFIG.maxRetries})`);
+        await sleep(waitTime);
+        return jiraRequestWithRetry(endpoint, options, retryCount + 1);
+      } else {
+        throw new Error(`Rate limit exceeded after ${CONFIG.maxRetries} retries`);
+      }
+    }
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Jira API Error (${response.status}): ${errorText}`);
+    }
+    
+    return response.json();
+    
+  } catch (error) {
+    // Retry on network errors
+    if (retryCount < CONFIG.maxRetries && (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT')) {
+      const waitTime = CONFIG.retryDelayMs * Math.pow(2, retryCount);
+      console.log(`   🔄 Network error. Retrying after ${waitTime/1000}s... (attempt ${retryCount + 1}/${CONFIG.maxRetries})`);
+      await sleep(waitTime);
+      return jiraRequestWithRetry(endpoint, options, retryCount + 1);
+    }
+    
+    throw error;
+  }
+}
+
+/**
+ * Sleep utility function
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // ============================================
 // MAIN FUNCTIONS
 // ============================================
@@ -274,69 +352,131 @@ async function searchIssuesWithWorkLogs(accountIds, startDate, endDate) {
   // Try multiple JQL strategies
   let jql;
   let allIssues = [];
+  let strategyUsed = "none";
   
   // Strategy 1: Try with worklogDate (may not work in all instances)
   try {
     jql = `worklogDate >= "${startDate}" AND worklogDate <= "${endDate}" AND worklogAuthor in (${accountIdsJql}) ORDER BY updated DESC`;
-    console.log(`   Trying JQL Strategy 1 (with worklogDate): ${jql}\n`);
+    console.log(`   Trying JQL Strategy 1 (with worklogDate):`);
+    console.log(`   JQL: ${jql.substring(0, 120)}...`);
     allIssues = await executeJQLSearch(jql);
+    console.log(`   ✅ Strategy 1 result: ${allIssues.length} issues found\n`);
+    strategyUsed = "worklogDate + worklogAuthor";
   } catch (error) {
-    console.log(`   ⚠️  Strategy 1 failed, trying alternative...`);
+    console.log(`   ⚠️  Strategy 1 failed: ${error.message}`);
+    console.log(`   Trying alternative strategy...\n`);
   }
   
   // Strategy 2: Broader search - just worklogAuthor, filter by date later
   if (allIssues.length === 0) {
-    jql = `worklogAuthor in (${accountIdsJql}) ORDER BY updated DESC`;
-    console.log(`   Trying JQL Strategy 2 (broader search): ${jql}\n`);
-    allIssues = await executeJQLSearch(jql);
+    try {
+      jql = `worklogAuthor in (${accountIdsJql}) ORDER BY updated DESC`;
+      console.log(`   Trying JQL Strategy 2 (broader search):`);
+      console.log(`   JQL: ${jql.substring(0, 120)}...`);
+      allIssues = await executeJQLSearch(jql);
+      console.log(`   ✅ Strategy 2 result: ${allIssues.length} issues found\n`);
+      strategyUsed = "worklogAuthor only";
+    } catch (error) {
+      console.log(`   ⚠️  Strategy 2 failed: ${error.message}`);
+    }
   }
   
   // Strategy 3: Even broader - issues updated in the date range where user might have logged work
   if (allIssues.length === 0) {
-    jql = `updated >= "${startDate}" AND updated <= "${endDate}" ORDER BY updated DESC`;
-    console.log(`   Trying JQL Strategy 3 (updated date range): ${jql}\n`);
-    allIssues = await executeJQLSearch(jql);
-    console.log(`   ℹ️  Note: Will filter work logs by author later\n`);
+    try {
+      jql = `updated >= "${startDate}" AND updated <= "${endDate}" ORDER BY updated DESC`;
+      console.log(`   Trying JQL Strategy 3 (updated date range):`);
+      console.log(`   JQL: ${jql}`);
+      allIssues = await executeJQLSearch(jql);
+      console.log(`   ✅ Strategy 3 result: ${allIssues.length} issues found`);
+      console.log(`   ℹ️  Note: Will filter work logs by author and date later\n`);
+      strategyUsed = "updated date range";
+    } catch (error) {
+      console.log(`   ⚠️  Strategy 3 failed: ${error.message}`);
+      console.log(`   No issues found with any search strategy\n`);
+    }
   }
   
-  console.log(`✅ Found ${allIssues.length} issues to check for work logs\n`);
+  console.log(`✅ Found ${allIssues.length} issues to check for work logs`);
+  console.log(`📊 Strategy used: ${strategyUsed}\n`);
+  
+  // Add debug info about unique projects and date ranges
+  if (allIssues.length > 0) {
+    const projects = [...new Set(allIssues.map(issue => issue.fields.project?.key).filter(Boolean))];
+    const createdDates = allIssues.map(issue => issue.fields.created?.split('T')[0]).filter(Boolean);
+    const updatedDates = allIssues.map(issue => issue.fields.updated?.split('T')[0]).filter(Boolean);
+    
+    console.log(`📋 Debug Info:`);
+    console.log(`   Projects found: ${projects.join(', ')}`);
+    console.log(`   Date range of issues (created): ${Math.min(...createdDates)} to ${Math.max(...createdDates)}`);
+    console.log(`   Date range of issues (updated): ${Math.min(...updatedDates)} to ${Math.max(...updatedDates)}\n`);
+  }
+  
   return allIssues;
 }
 
 /**
- * Execute JQL search with pagination
+ * Execute JQL search with pagination (cursor-based for /search/jql endpoint)
  */
 async function executeJQLSearch(jql) {
   let allIssues = [];
-  let startAt = 0;
-  let total = 0;
+  let nextPageToken = null;
+  let pageCount = 0;
+  let isLast = false;
   
   do {
-    // Build query parameters for the new API
+    pageCount++;
+    
+    // Build query parameters for the JQL search API (cursor-based pagination)
     const fields = ['summary', 'issuetype', 'status', 'project', 'assignee', 'created'];
     const queryParams = new URLSearchParams({
       jql: jql,
       fields: fields.join(','),
-      maxResults: CONFIG.maxResultsPerPage,
-      startAt: startAt
+      maxResults: CONFIG.maxResultsPerPage
     });
     
+    // Add pagination token if we have one
+    if (nextPageToken) {
+      queryParams.set('nextPageToken', nextPageToken);
+    }
+    
+    // Try the JQL search endpoint (as required by newer Jira instances)
     const response = await jiraRequest(`/rest/api/3/search/jql?${queryParams.toString()}`);
     
-    total = response.total;
-    allIssues = allIssues.concat(response.issues);
-    startAt += CONFIG.maxResultsPerPage;
-    
-    console.log(`   Fetched ${allIssues.length} of ${total} issues...`);
-    
-    // Limit to reasonable number to avoid too many API calls
-    if (allIssues.length >= 500) {
-      console.log(`   ⚠️  Limiting to first 500 issues to avoid excessive API calls`);
+    // Validate response
+    if (!response || !Array.isArray(response.issues)) {
+      console.log(`   ❌ Invalid response from Jira API:`, JSON.stringify(response, null, 2));
       break;
     }
     
-  } while (allIssues.length < total);
+    const issuesInThisPage = response.issues || [];
+    allIssues = allIssues.concat(issuesInThisPage);
+    
+    // Update pagination info
+    nextPageToken = response.nextPageToken;
+    isLast = response.isLast || false;
+    
+    // Calculate percentage (estimate since we don't have total)
+    console.log(`   Page ${pageCount}: Fetched ${issuesInThisPage.length} issues (total so far: ${allIssues.length})`);
+    
+    // Break if no more issues to fetch
+    if (issuesInThisPage.length === 0 || isLast) {
+      console.log(`   ℹ️  Reached end of results (isLast: ${isLast})`);
+      break;
+    }
+    
+    // Limit to reasonable number to avoid too many API calls
+    if (allIssues.length >= CONFIG.maxIssuesToProcess) {
+      console.log(`   ⚠️  Limiting to first ${CONFIG.maxIssuesToProcess} issues to avoid excessive API calls`);
+      console.log(`   ℹ️  To process more issues, increase CONFIG.maxIssuesToProcess in the script`);
+      console.log(`   📊 Current setting allows ~${CONFIG.maxIssuesToProcess} issues (good for groups of 60+ people)`);
+      break;
+    }
+    
+    // Continue pagination if we have more pages
+  } while (nextPageToken && !isLast);
   
+  console.log(`   ✅ Pagination complete. Fetched ${allIssues.length} total issues across ${pageCount} pages`);
   return allIssues;
 }
 
@@ -349,18 +489,206 @@ async function getIssueWorkLogs(issueKey) {
 }
 
 /**
+ * Get work logs for a specific issue with retry logic and pagination
+ */
+async function getIssueWorkLogsWithRetry(issueKey) {
+  let allWorklogs = [];
+  let startAt = 0;
+  const maxResults = 1000; // Maximum per request
+  let total = 0;
+  let hasMore = true;
+  
+  while (hasMore) {
+    const queryParams = new URLSearchParams({
+      startAt: startAt.toString(),
+      maxResults: maxResults.toString()
+    });
+    
+    const response = await jiraRequestWithRetry(`/rest/api/3/issue/${issueKey}/worklog?${queryParams.toString()}`);
+    
+    const worklogsInThisPage = response.worklogs || [];
+    allWorklogs = allWorklogs.concat(worklogsInThisPage);
+    
+    // Update pagination info
+    total = response.total || 0;
+    startAt += worklogsInThisPage.length;
+    hasMore = worklogsInThisPage.length === maxResults && startAt < total;
+    
+    // Debug log for issues with many worklogs
+    if (total > 1000) {
+      console.log(`     📊 ${issueKey}: Fetched ${allWorklogs.length}/${total} worklogs (page ${Math.ceil(startAt/maxResults)})`);
+    }
+    
+    // Safety check to prevent infinite loops
+    if (startAt > CONFIG.maxWorklogsPerIssue) {
+      console.log(`     ⚠️  ${issueKey}: Stopping at ${allWorklogs.length} worklogs (safety limit: ${CONFIG.maxWorklogsPerIssue})`);
+      break;
+    }
+  }
+  
+  // Update global stats
+  STATS.workLogsFetched += allWorklogs.length;
+  
+  if (total > 1000) {
+    console.log(`     ✅ ${issueKey}: Completed worklog fetch - ${allWorklogs.length} total worklogs`);
+  }
+  
+  return allWorklogs;
+}
+
+/**
+ * Process work logs in batches (for large groups)
+ */
+async function processBatchedWorkLogs(issues, accountIds, startDate, endDate, isGroupQuery = false) {
+  const allWorkLogs = [];
+  const totalIssues = issues.length;
+  
+  // Determine if we should use batch processing
+  const useBatchProcessing = isGroupQuery && CONFIG.enableBatchProcessing && totalIssues > CONFIG.batchSize;
+  
+  if (useBatchProcessing) {
+    console.log(`📦 Using batch processing for ${totalIssues} issues (batch size: ${CONFIG.batchSize})`);
+    console.log(`   Estimated time: ${Math.ceil(totalIssues / CONFIG.batchSize) * (CONFIG.batchDelayMs / 1000)} seconds minimum\n`);
+    
+    // Process in batches
+    for (let i = 0; i < totalIssues; i += CONFIG.batchSize) {
+      const batchStart = i;
+      const batchEnd = Math.min(i + CONFIG.batchSize, totalIssues);
+      const batch = issues.slice(batchStart, batchEnd);
+      const batchNumber = Math.floor(i / CONFIG.batchSize) + 1;
+      const totalBatches = Math.ceil(totalIssues / CONFIG.batchSize);
+      
+      console.log(`📦 Processing batch ${batchNumber}/${totalBatches} (issues ${batchStart + 1}-${batchEnd})...`);
+      
+      // Process current batch
+      const batchWorkLogs = await processSingleBatch(batch, accountIds, startDate, endDate);
+      allWorkLogs.push(...batchWorkLogs);
+      
+      // Progress update
+      const processedCount = batchEnd;
+      const progressPercent = ((processedCount / totalIssues) * 100).toFixed(1);
+      console.log(`   ✅ Batch ${batchNumber} complete. Progress: ${processedCount}/${totalIssues} issues (${progressPercent}%)`);
+      
+      // Add delay between batches (except for the last batch)
+      if (batchEnd < totalIssues) {
+        console.log(`   ⏱️  Waiting ${CONFIG.batchDelayMs/1000}s before next batch...`);
+        await sleep(CONFIG.batchDelayMs);
+      }
+      
+      console.log(); // Empty line for readability
+    }
+    
+    console.log(`✅ Batch processing complete! Processed ${totalIssues} issues in ${Math.ceil(totalIssues / CONFIG.batchSize)} batches\n`);
+  } else {
+    // Use regular processing for smaller datasets or non-group queries
+    console.log(`📄 Processing ${totalIssues} issues sequentially...\n`);
+    const batchWorkLogs = await processSingleBatch(issues, accountIds, startDate, endDate);
+    allWorkLogs.push(...batchWorkLogs);
+  }
+  
+  return allWorkLogs;
+}
+
+/**
+ * Process a single batch of issues
+ */
+async function processSingleBatch(issues, accountIds, startDate, endDate) {
+  const batchWorkLogs = [];
+  
+  for (const issue of issues) {
+    try {
+      // Use retry logic for group queries to handle rate limits better
+      const worklogs = await getIssueWorkLogsWithRetry(issue.key);
+      STATS.workLogsFetched += worklogs.length;
+      
+      const filteredLogs = filterWorkLogs(worklogs, accountIds, startDate, endDate);
+      STATS.workLogsMatched += filteredLogs.length;
+      
+      if (worklogs.length > 0 && filteredLogs.length === 0) {
+        console.log(`   ℹ️  ${issue.key}: Found ${worklogs.length} work logs, but 0 matched filters (author/date)`);
+      } else if (filteredLogs.length > 0) {
+        console.log(`   ✓ ${issue.key}: ${filteredLogs.length} work logs matched`);
+      }
+      
+      filteredLogs.forEach(log => {
+        // Track total time
+        STATS.totalTimeSeconds += log.timeSpentSeconds;
+        
+        batchWorkLogs.push({
+          issueKey: issue.key,
+          issueType: issue.fields.issuetype.name,
+          issueSummary: issue.fields.summary,
+          projectKey: issue.fields.project.key,
+          author: log.author.displayName,
+          authorEmail: log.author.emailAddress || '',
+          authorAccountId: log.author.accountId,
+          timeSpent: log.timeSpent,
+          timeSpentSeconds: log.timeSpentSeconds,
+          date: log.started.split('T')[0],
+          started: log.started,
+          comment: log.comment || ''
+        });
+      });
+      
+    } catch (error) {
+      console.error(`   ❌ Error processing ${issue.key}: ${error.message}`);
+      // Continue with next issue
+    }
+  }
+  
+  return batchWorkLogs;
+}
+
+/**
  * Filter work logs by date range and authors
  */
 function filterWorkLogs(worklogs, accountIds, startDate, endDate) {
   const start = new Date(startDate + 'T00:00:00.000Z');
   const end = new Date(endDate + 'T23:59:59.999Z');
   
-  return worklogs.filter(log => {
+  const originalCount = worklogs.length;
+  const filtered = worklogs.filter(log => {
     const logDate = new Date(log.started);
     const isInDateRange = logDate >= start && logDate <= end;
     const isAuthorInGroup = accountIds.includes(log.author.accountId);
+    
+    // Debug logging for filtering issues
+    if (!isInDateRange) {
+      const logDateStr = logDate.toISOString().split('T')[0];
+      // Only log first few date mismatches to avoid spam
+      if (Math.random() < 0.1) { // Log ~10% of date mismatches
+        console.log(`     ⚠️  Date filter: ${logDateStr} not in range ${startDate} to ${endDate}`);
+      }
+    }
+    
+    if (!isAuthorInGroup) {
+      // Only log first few author mismatches to avoid spam
+      if (Math.random() < 0.1) { // Log ~10% of author mismatches
+        console.log(`     ⚠️  Author filter: ${log.author.displayName} (${log.author.accountId}) not in group`);
+      }
+    }
+    
     return isInDateRange && isAuthorInGroup;
   });
+  
+  // Summary of filtering
+  if (originalCount > 0 && filtered.length === 0) {
+    console.log(`     📊 Filtering debug: ${originalCount} logs → ${filtered.length} logs`);
+    console.log(`     📅 Date range: ${startDate} to ${endDate}`);
+    console.log(`     👥 Group size: ${accountIds.length} users`);
+    
+    // Sample a few logs to see what's being filtered out
+    const sampleLogs = worklogs.slice(0, 3);
+    sampleLogs.forEach(log => {
+      const logDate = new Date(log.started);
+      const logDateStr = logDate.toISOString().split('T')[0];
+      const isInDateRange = logDate >= start && logDate <= end;
+      const isAuthorInGroup = accountIds.includes(log.author.accountId);
+      console.log(`     📋 Sample: ${log.author.displayName} on ${logDateStr} - Date OK: ${isInDateRange}, Author OK: ${isAuthorInGroup}`);
+    });
+  }
+  
+  return filtered;
 }
 
 /**
@@ -600,7 +928,7 @@ async function exportToExcel(report, userOrGroupName) {
 /**
  * Display execution summary
  */
-function displayExecutionSummary() {
+function displayExecutionSummary(allWorkLogs = [], groupMembers = []) {
   const executionTime = ((STATS.endTime - STATS.startTime) / 1000).toFixed(2);
   const totalHours = (STATS.totalTimeSeconds / 3600).toFixed(2);
   const avgTimePerIssue = STATS.issuesFetched > 0 
@@ -625,6 +953,30 @@ function displayExecutionSummary() {
   console.log(`   Total hours: ${totalHours}h`);
   console.log(`   Average per issue: ${avgTimePerIssue}h`);
   console.log(`   Average per work log: ${(STATS.totalTimeSeconds / STATS.workLogsMatched / 3600).toFixed(2)}h`);
+  
+  // Additional analysis for missing tickets
+  if (allWorkLogs.length > 0) {
+    const uniqueAuthors = [...new Set(allWorkLogs.map(log => log.author))];
+    const uniqueProjects = [...new Set(allWorkLogs.map(log => log.projectKey))];
+    const dateRange = allWorkLogs.map(log => log.date).sort();
+    
+    console.log(`\n🔍 Analysis for Missing Tickets:`);
+    console.log(`   Authors in final report: ${uniqueAuthors.length} (expected: ${groupMembers.length})`);
+    console.log(`   Projects in report: ${uniqueProjects.join(', ')}`);
+    if (dateRange.length > 0) {
+      console.log(`   Actual date range: ${dateRange[0]} to ${dateRange[dateRange.length - 1]}`);
+    }
+    console.log(`   Expected date range: ${CONFIG.startDate} to ${CONFIG.endDate}`);
+    
+    if (STATS.workLogsFetched > STATS.workLogsMatched) {
+      const filteredOutCount = STATS.workLogsFetched - STATS.workLogsMatched;
+      const filteredOutPercentage = ((filteredOutCount / STATS.workLogsFetched) * 100).toFixed(1);
+      console.log(`\n⚠️  ${filteredOutCount} work logs (${filteredOutPercentage}%) were filtered out:`);
+      console.log(`   - Check date range: Some logs might be outside ${CONFIG.startDate} to ${CONFIG.endDate}`);
+      console.log(`   - Check group membership: Some logs might be from users not in the group`);
+      console.log(`   - Check timezone issues: Logs might be in different timezone`);
+    }
+  }
   
   console.log('\n' + '='.repeat(80));
 }
@@ -683,47 +1035,18 @@ async function main() {
     if (issues.length === 0) {
       console.log('⚠️  No issues found with work logs for the specified criteria');
       STATS.endTime = Date.now();
-      displayExecutionSummary();
+      displayExecutionSummary([], groupMembers);
       return;
     }
     
     // Step 3: Fetch and filter work logs for each issue
     console.log('📥 Fetching detailed work logs for each issue...');
-    const allWorkLogs = [];
     
-    for (const issue of issues) {
-      const worklogs = await getIssueWorkLogs(issue.key);
-      STATS.workLogsFetched += worklogs.length;
-      
-      const filteredLogs = filterWorkLogs(worklogs, accountIds, startDate, endDate);
-      STATS.workLogsMatched += filteredLogs.length;
-      
-      if (worklogs.length > 0 && filteredLogs.length === 0) {
-        console.log(`   ℹ️  ${issue.key}: Found ${worklogs.length} work logs, but 0 matched filters (author/date)`);
-      } else if (filteredLogs.length > 0) {
-        console.log(`   ✓ ${issue.key}: ${filteredLogs.length} work logs matched`);
-      }
-      
-      filteredLogs.forEach(log => {
-        // Track total time
-        STATS.totalTimeSeconds += log.timeSpentSeconds;
-        
-        allWorkLogs.push({
-          issueKey: issue.key,
-          issueType: issue.fields.issuetype.name,
-          issueSummary: issue.fields.summary,
-          projectKey: issue.fields.project.key,
-          author: log.author.displayName,
-          authorEmail: log.author.emailAddress || '',
-          authorAccountId: log.author.accountId,
-          timeSpent: log.timeSpent,
-          timeSpentSeconds: log.timeSpentSeconds,
-          date: log.started.split('T')[0],
-          started: log.started,
-          comment: log.comment || ''
-        });
-      });
-    }
+    // Determine if this is a group query (for batch processing decision)
+    const isGroupQuery = !!CONFIG.groupName;
+    
+    // Use batch processing for groups, regular processing for individuals
+    const allWorkLogs = await processBatchedWorkLogs(issues, accountIds, startDate, endDate, isGroupQuery);
     
     console.log(`\n📊 Work Log Summary:`);
     console.log(`   Total work logs found: ${STATS.workLogsFetched}`);
@@ -745,7 +1068,7 @@ async function main() {
     
     // End timer and display summary
     STATS.endTime = Date.now();
-    displayExecutionSummary();
+    displayExecutionSummary(allWorkLogs, specificUserEmail ? [{ displayName: specificUserEmail }] : []);
     
     console.log('\n✨ Done!\n');
     
@@ -757,7 +1080,7 @@ async function main() {
     // Display partial summary if available
     if (STATS.startTime) {
       console.log('\n⚠️  Partial execution summary:');
-      displayExecutionSummary();
+      displayExecutionSummary([], []);
     }
     
     process.exit(1);
