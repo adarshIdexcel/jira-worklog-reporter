@@ -2,6 +2,22 @@
 
 A simple tool to download work log reports from Jira into Excel format.
 
+## ✨ Features
+
+- ⭐ **NEW:** Fetch worklogs for any specific user by email
+- 📊 Generate Excel reports with summary and detailed views
+- 👥 Support for individual users, teams, or groups
+- 📅 Flexible date range selection (custom or last N days)
+- 🔍 Automatic issue search with multiple JQL strategies
+- 📈 Detailed execution statistics and API call tracking
+
+## 🎯 Use Cases
+
+- **Performance Reviews:** Generate individual employee work log reports
+- **Client Billing:** Track billable hours for specific team members
+- **Team Reports:** Consolidate work logs for entire departments
+- **Personal Tracking:** Export your own work logs for time management
+
 ---
 
 ## ✅ What You Need Before Starting
@@ -38,11 +54,59 @@ Find these lines near the top (around line 25-30) and update them:
 email: 'your-email@idexcel.com',      // ⚠️ Change to your email
 apiToken: 'YOUR_JIRA_API_TOKEN',      // ⚠️ Paste your API token here
 
-groupName: 'AWS Team',                 // ⚠️ Change to your team name
-useCurrentUser: false,                 // Keep false for team reports
+// Choose ONE of the following options:
+specificUserEmail: null,               // Option 1: Specific user email (e.g., 'john.doe@idexcel.com')
+groupName: 'AWS Team',                 // Option 2: Team name (e.g., 'AWS Team')
+useCurrentUser: false,                 // Option 3: Set true for your own worklogs only
 ```
 
 **Save the file** after making changes.
+
+---
+
+## 🚀 Quick Start Guide
+
+### For a Specific User's Report (Most Common Use Case)
+
+1. **Get the user's email** (e.g., `john.doe@idexcel.com`)
+
+2. **Open `jira-worklog-fetcher.js`** and set:
+   ```javascript
+   specificUserEmail: 'john.doe@idexcel.com',  // ⚠️ Change this
+   groupName: null,                            // Keep null
+   useCurrentUser: false,                      // Keep false
+   ```
+
+3. **Run the script:**
+   ```powershell
+   node jira-worklog-fetcher.js
+   ```
+
+4. **Choose date range** when prompted (or press Enter for last 30 days)
+
+5. **Find your report** in `generated-reports/John_Doe_2025-10-10_14-30-00.xlsx`
+
+### For Your Own Worklogs
+
+1. **Open `jira-worklog-fetcher.js`** and set:
+   ```javascript
+   specificUserEmail: null,      // Keep null
+   groupName: null,              // Keep null
+   useCurrentUser: true,         // ⚠️ Set to true
+   ```
+
+2. **Run:** `node jira-worklog-fetcher.js`
+
+### For a Team/Group Report
+
+1. **Open `jira-worklog-fetcher.js`** and set:
+   ```javascript
+   specificUserEmail: null,           // Keep null
+   groupName: 'AWS Team',             // ⚠️ Set team name
+   useCurrentUser: false,             // Keep false
+   ```
+
+2. **Run:** `node jira-worklog-fetcher.js`
 
 ---
 
@@ -88,12 +152,53 @@ The Excel file has 2 sheets:
 
 Open `jira-worklog-fetcher.js` and look for the `CONFIG` section:
 
+### Authentication Settings (Required)
+
 | Setting | What It Does | Example |
 |---------|-------------|---------|
 | `email` | Your Jira login email | `john.doe@idexcel.com` |
 | `apiToken` | Your Jira API token (from Step 2 above) | `ATATT3xFfGF0...` |
-| `groupName` | Team name to generate report for | `'AWS Team'` |
-| `useCurrentUser` | Set to `true` for your own logs only | `false` |
+
+### Report Scope (Choose ONE)
+
+You must configure **one of these three options** to specify whose worklogs to fetch:
+
+#### Option 1: Specific User by Email ⭐ **NEW**
+Fetch worklogs for **any Jira user** by their email address.
+
+```javascript
+specificUserEmail: 'jane.smith@idexcel.com',  // Set user's email
+groupName: null,                               // Keep null
+useCurrentUser: false,                         // Keep false
+```
+
+**Use this when:** You need a report for a specific team member (e.g., for performance reviews, time tracking verification, or client billing).
+
+---
+
+#### Option 2: Your Own Worklogs
+Fetch worklogs for the **currently authenticated user** (the user whose API token you're using).
+
+```javascript
+specificUserEmail: null,     // Keep null
+groupName: null,              // Keep null
+useCurrentUser: true,         // Set to true
+```
+
+**Use this when:** You want to generate your personal work log report.
+
+---
+
+#### Option 3: Team/Group Worklogs
+Fetch worklogs for **all members of a Jira group**.
+
+```javascript
+specificUserEmail: null,           // Keep null
+groupName: 'AWS Team',             // Set your team/group name
+useCurrentUser: false,             // Keep false
+```
+
+**Use this when:** You need a consolidated report for an entire team or department.
 
 ---
 
@@ -105,11 +210,23 @@ Open `jira-worklog-fetcher.js` and look for the `CONFIG` section:
 **Problem:** "Invalid API token"
 - **Solution:** Generate a new token from the link in Step 2 above
 
+**Problem:** "User not found with email: xyz@idexcel.com"
+- **Solution:** 
+  - Verify the email address is spelled correctly
+  - Check that the user exists in your Jira instance
+  - Ensure you have permission to view that user's information
+
 **Problem:** "No issues found"
-- **Solution:** Check that the team name is spelled correctly
+- **Solution:** 
+  - For `specificUserEmail`: Verify the user has logged work in the date range
+  - For `groupName`: Check that the team name is spelled correctly (case-sensitive)
+  - Try expanding the date range
 
 **Problem:** Script takes too long
 - **Solution:** This is normal for large teams or long date ranges (100+ issues can take 2-3 minutes)
+
+**Problem:** "Please configure one of: specificUserEmail, useCurrentUser=true, or groupName"
+- **Solution:** You must set **exactly ONE** of these options. Make sure the others are `null` or `false`
 
 ---
 
@@ -123,10 +240,27 @@ Check the technical documentation in `RATE-LIMITS.md`
 
 ## 🎯 Usage Examples
 
-### Example 1: Fetch Current User's Work Logs (Last 30 Days)
+### Example 1: Fetch Specific User's Work Logs
+
+**NEW! Fetch worklogs for any user by their email:**
+```javascript
+specificUserEmail: 'jane.smith@idexcel.com',  // ⚠️ User's email
+groupName: null,
+useCurrentUser: false,
+startDate: getDateDaysAgo(30),
+endDate: getDateDaysAgo(0)
+```
+
+```powershell
+node jira-worklog-fetcher.js
+```
+
+### Example 2: Fetch Current User's Work Logs (Last 30 Days)
 
 **Default configuration** - no changes needed:
 ```javascript
+specificUserEmail: null,
+groupName: null,
 useCurrentUser: true,
 startDate: getDateDaysAgo(30),
 endDate: getDateDaysAgo(0)
@@ -136,7 +270,7 @@ endDate: getDateDaysAgo(0)
 node jira-worklog-fetcher.js
 ```
 
-### Example 2: Fetch Work Logs for a Specific Group
+### Example 3: Fetch Work Logs for a Specific Group
 
 ```javascript
 useCurrentUser: false,
@@ -145,14 +279,15 @@ startDate: getDateDaysAgo(30),
 endDate: getDateDaysAgo(0)
 ```
 
-### Example 3: Custom Date Range (Specific Dates)
+### Example 4: Custom Date Range (Specific Dates)
 
 ```javascript
+specificUserEmail: 'john.doe@idexcel.com',
 startDate: '2025-09-01',  // September 1, 2025
 endDate: '2025-09-30',    // September 30, 2025
 ```
 
-### Example 4: Last Quarter (90 days)
+### Example 5: Last Quarter (90 days)
 
 ```javascript
 startDate: getDateDaysAgo(90),
@@ -233,8 +368,9 @@ The script also saves a detailed JSON report to `jira-worklogs-report.json`:
 | `jiraBaseUrl` | string | Your Jira instance URL | `https://idexcel.atlassian.net` |
 | `email` | string | Your Jira account email | ⚠️ **Required** |
 | `apiToken` | string | Your Jira API token | ⚠️ **Required** |
+| `specificUserEmail` | string\|null | Email of specific user to fetch worklogs for | `null` |
 | `groupName` | string\|null | Jira group name or null | `null` |
-| `useCurrentUser` | boolean | Use current user instead of group | `true` |
+| `useCurrentUser` | boolean | Use current user instead of group | `false` |
 | `startDate` | string | Start date (YYYY-MM-DD) | 30 days ago |
 | `endDate` | string | End date (YYYY-MM-DD) | Today |
 | `maxResultsPerPage` | number | Pagination size | `100` |

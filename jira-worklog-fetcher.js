@@ -41,9 +41,15 @@ const CONFIG = {
   email: '<email>',  // Replace with your email
   apiToken: '<apiToken>',  // Replace with your Jira API token
 
-  // Filter criteria
-  groupName: null,  // e.g., 'AWS Team' or null for current user only
-  useCurrentUser: false,  // Set to false if using groupName
+  // Filter criteria - Choose ONE of the following:
+  // Option 1: Specific user by email
+  specificUserEmail: "<email>",  // e.g., 'john.doe@idexcel.com' or null
+  
+  // Option 2: Team/Group
+  groupName: null,  // e.g., 'AWS Team' or null
+  
+  // Option 3: Current authenticated user
+  useCurrentUser: false,  // Set to true to fetch only your own worklogs
   
   // Date range (ISO format YYYY-MM-DD or Date objects)
   // Default: Last 30 days
@@ -223,6 +229,34 @@ async function getGroupMembers(groupName) {
   });
   
   return allMembers;
+}
+
+/**
+ * Get a specific user by email address
+ */
+async function getUserByEmail(email) {
+  console.log(`👤 Fetching user details for: ${email}...`);
+  
+  // Search for user by email using the user search API
+  const response = await jiraRequest(
+    `/rest/api/3/user/search?query=${encodeURIComponent(email)}`
+  );
+  
+  if (!response || response.length === 0) {
+    throw new Error(`User not found with email: ${email}`);
+  }
+  
+  // Find exact match (case-insensitive)
+  const user = response.find(u => 
+    u.emailAddress && u.emailAddress.toLowerCase() === email.toLowerCase()
+  );
+  
+  if (!user) {
+    throw new Error(`No exact match found for email: ${email}`);
+  }
+  
+  console.log(`✅ Found user: ${user.displayName} (${user.emailAddress})`);
+  return user;
 }
 
 /**
@@ -622,16 +656,24 @@ async function main() {
     let accountIds = [];
     let reportName = '';
     
-    if (CONFIG.useCurrentUser) {
+    // Priority: specificUserEmail > useCurrentUser > groupName
+    if (CONFIG.specificUserEmail) {
+      const specificUser = await getUserByEmail(CONFIG.specificUserEmail);
+      accountIds = [specificUser.accountId];
+      reportName = specificUser.displayName || specificUser.emailAddress;
+      console.log(`📋 Fetching worklogs for specific user: ${reportName}\n`);
+    } else if (CONFIG.useCurrentUser) {
       const currentUser = await getCurrentUser();
       accountIds = [currentUser.accountId];
       reportName = currentUser.displayName || currentUser.emailAddress || 'CurrentUser';
+      console.log(`📋 Fetching worklogs for current user: ${reportName}\n`);
     } else if (CONFIG.groupName) {
       const members = await getGroupMembers(CONFIG.groupName);
       accountIds = members.map(m => m.accountId);
       reportName = CONFIG.groupName;
+      console.log(`📋 Fetching worklogs for group: ${reportName}\n`);
     } else {
-      throw new Error('Either set useCurrentUser=true or provide a groupName');
+      throw new Error('Please configure one of: specificUserEmail, useCurrentUser=true, or groupName');
     }
     
     // Step 2: Search issues with work logs
