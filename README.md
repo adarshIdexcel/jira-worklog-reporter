@@ -1,22 +1,31 @@
 # 📊 Jira Work Log Report Generator
 
-A simple tool to download work log reports from Jira into Excel format.
+A comprehensive tool to download work log reports from Jira into Excel format.
 
 ## ✨ Features
 
+- ⭐ **NEW:** JQL-based worklog fetching for custom issue queries
 - ⭐ **NEW:** Fetch worklogs for any specific user by email
 - 📊 Generate Excel reports with summary and detailed views
 - 👥 Support for individual users, teams, or groups
+- 🔍 Custom JQL queries for precise issue targeting
 - 📅 Flexible date range selection (custom or last N days)
 - 🔍 Automatic issue search with multiple JQL strategies
 - 📈 Detailed execution statistics and API call tracking
 
 ## 🎯 Use Cases
 
+### User/Group-Based Reports (`jira-worklog-fetcher.js`)
 - **Performance Reviews:** Generate individual employee work log reports
 - **Client Billing:** Track billable hours for specific team members
 - **Team Reports:** Consolidate work logs for entire departments
 - **Personal Tracking:** Export your own work logs for time management
+
+### JQL-Based Reports (`jira-jql-worklog-fetcher.js`)
+- **Project Reports:** All worklogs for a specific project
+- **Epic/Feature Analysis:** Worklogs for issues under a specific epic
+- **Custom Queries:** Complex filtering (e.g., "Fixed issues last sprint")
+- **Issue Lists:** Worklogs for a predefined list of ticket keys
 
 ---
 
@@ -377,6 +386,74 @@ The script also saves a detailed JSON report to `jira-worklogs-report.json`:
 | `saveToFile` | boolean | Save JSON report to file | `true` |
 | `outputFileName` | string | Output file name | `'jira-worklogs-report.json'` |
 
+
+---
+
+## 🔍 JQL-Based Worklog Fetcher (NEW!)
+
+For more advanced use cases, use the **`jira-jql-worklog-fetcher.js`** script.
+
+### 🎯 When to Use This Script
+
+- You have a specific list of issues (tickets) you want worklog data for
+- You need worklogs for a complex query (e.g., "all issues in Epic XYZ that were resolved last month")
+- You want worklogs from a specific project, regardless of who logged the time
+- You need worklogs for issues matching custom criteria
+
+### ⚡ Quick Start
+
+1. **Configure your credentials** in `jira-jql-worklog-fetcher.js`:
+   ```javascript
+   const CONFIG = {
+     email: 'your.email@company.com',     // Your email
+     apiToken: 'ATATT3xFfGF0...',         // Your API token
+     jqlQuery: 'project = "MY_PROJECT" AND status = "Done"',  // Your JQL
+   ```
+
+2. **Run the script**:
+   ```powershell
+   node jira-jql-worklog-fetcher.js
+   ```
+
+3. **Choose your JQL**: You can either use the JQL from the config or enter a custom one when prompted.
+
+### 📝 JQL Query Examples
+
+| Use Case | JQL Example |
+|----------|-------------|
+| **Specific Issues** | `key in (PROJ-123, PROJ-456, PROJ-789)` |
+| **Project Issues** | `project = "MY_PROJECT" AND status = "Done"` |
+| **Epic Issues** | `"Epic Link" = PROJ-100` |
+| **Recent Issues** | `updated >= -30d AND assignee = currentUser()` |
+| **Sprint Issues** | `project = "SCRUM" AND sprint = "Sprint 45"` |
+| **Component Issues** | `project = "WEB" AND component = "Frontend"` |
+
+### 🎛️ Optional Filters
+
+You can add additional filters in the CONFIG:
+
+```javascript
+// Filter worklogs by date (optional)
+dateFilter: {
+  enabled: true,
+  startDate: '2025-09-01',
+  endDate: '2025-10-16'
+},
+
+// Filter worklogs by specific authors (optional)
+authorFilter: {
+  enabled: true,
+  authorEmails: ['user1@company.com', 'user2@company.com']
+}
+```
+
+### 📊 Output
+
+- **Console**: Detailed breakdown by issue and author
+- **Excel**: Same 2-sheet format as the main script
+- **Filename**: `Project_NAME_2025-10-16_14-30-45.xlsx`
+
+---
 
 ## 🐛 Troubleshooting
 

@@ -6,10 +6,13 @@
   "main": "jira-worklog-fetcher.js",
   "scripts": {
     "start": "node jira-worklog-fetcher.js",
-    "fetch": "node jira-worklog-fetcher.js"
+    "fetch": "node jira-worklog-fetcher.js",
+    "jql": "node jira-jql-worklog-fetcher.js",
+    "jql-fetch": "node jira-jql-worklog-fetcher.js"
   },
   "dependencies": {
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "xlsx": "^0.18.5"
   },
   "keywords": [
     "jira",

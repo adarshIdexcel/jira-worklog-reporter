@@ -266,6 +266,72 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * Parse Jira worklog comment (handles both plain text and ADF format)
+ */
+function parseWorklogComment(comment) {
+  if (!comment) return '';
+  
+  // If it's already a string, return as-is
+  if (typeof comment === 'string') {
+    return comment;
+  }
+  
+  // If it's an ADF (Atlassian Document Format) object
+  if (typeof comment === 'object' && comment.type === 'doc') {
+    return extractTextFromADF(comment);
+  }
+  
+  // Fallback: stringify the object
+  return JSON.stringify(comment);
+}
+
+/**
+ * Extract plain text from Atlassian Document Format (ADF)
+ */
+function extractTextFromADF(adfNode) {
+  if (!adfNode || !adfNode.content) return '';
+  
+  let text = '';
+  
+  for (const contentItem of adfNode.content) {
+    if (contentItem.type === 'paragraph' && contentItem.content) {
+      // Extract text from paragraph
+      for (const textItem of contentItem.content) {
+        if (textItem.type === 'text' && textItem.text) {
+          text += textItem.text;
+        } else if (textItem.type === 'hardBreak') {
+          text += '\n';
+        }
+      }
+      text += '\n'; // Add line break after paragraph
+    } else if (contentItem.type === 'bulletList' && contentItem.content) {
+      // Handle bullet lists
+      for (const listItem of contentItem.content) {
+        if (listItem.type === 'listItem' && listItem.content) {
+          text += '• ';
+          text += extractTextFromADF({ content: listItem.content });
+        }
+      }
+    } else if (contentItem.type === 'orderedList' && contentItem.content) {
+      // Handle numbered lists
+      contentItem.content.forEach((listItem, index) => {
+        if (listItem.type === 'listItem' && listItem.content) {
+          text += `${index + 1}. `;
+          text += extractTextFromADF({ content: listItem.content });
+        }
+      });
+    } else if (contentItem.type === 'codeBlock' && contentItem.content) {
+      // Handle code blocks
+      text += '```\n';
+      text += extractTextFromADF({ content: contentItem.content });
+      text += '```\n';
+    }
+  }
+  
+  return text.trim();
+}
+
 // ============================================
 // MAIN FUNCTIONS
 // ============================================
@@ -626,7 +692,7 @@ async function processSingleBatch(issues, accountIds, startDate, endDate) {
           timeSpentSeconds: log.timeSpentSeconds,
           date: log.started.split('T')[0],
           started: log.started,
-          comment: log.comment || ''
+          comment: parseWorklogComment(log.comment)
         });
       });
       
@@ -785,12 +851,11 @@ function displayConsoleReport(report) {
     
     data.logs.forEach(log => {
       console.log(`   ├─ ${log.author} logged ${log.timeSpent} on ${log.date}`);
-      if (log.comment && typeof log.comment === 'string') {
-        console.log(`   │  Comment: ${log.comment.substring(0, 80)}${log.comment.length > 80 ? '...' : ''}`);
-      } else if (log.comment && typeof log.comment === 'object') {
-        // Comment might be a rich text object
-        const commentText = JSON.stringify(log.comment).substring(0, 80);
-        console.log(`   │  Comment: ${commentText}...`);
+      if (log.comment) {
+        // Clean up comment for display (remove extra newlines)
+        const cleanComment = log.comment.replace(/\n+/g, ' ').trim();
+        const commentPreview = cleanComment.substring(0, 80);
+        console.log(`   │  Work Description: ${commentPreview}${cleanComment.length > 80 ? '...' : ''}`);
       }
     });
   });
@@ -880,14 +945,17 @@ async function exportToExcel(report, userOrGroupName) {
   
   // Prepare detailed work logs data
   const workLogsData = report.workLogs.map(log => ({
-    'Author': log.author,
-    'Issue': log.issueKey,
+    'Work Logged By': log.author,
+    'User Email': log.authorEmail,
+    'Issue Key': log.issueKey,
     'Issue Summary': log.issueSummary,
+    'Project': log.projectKey,
+    'Issue Type': log.issueType,
     'Work log added': log.started,
     'Work log created': log.started, // Jira doesn't separate these in API
     'Work log Time zone': CONFIG.timezone,
-    'Time spent': parseFloat(log.timeSpentHours),
-    'Work log comment': log.comment || ''
+    'Time spent (Hours)': parseFloat(log.timeSpentHours),
+    'Work Description': log.comment || ''
   }));
   
   // Sort by author, then by date
@@ -901,14 +969,17 @@ async function exportToExcel(report, userOrGroupName) {
   
   // Set column widths
   ws2['!cols'] = [
-    { wch: 20 }, // Author
-    { wch: 15 }, // Issue
+    { wch: 25 }, // Work Logged By
+    { wch: 30 }, // User Email
+    { wch: 15 }, // Issue Key
     { wch: 50 }, // Issue Summary
+    { wch: 15 }, // Project
+    { wch: 15 }, // Issue Type
     { wch: 20 }, // Work log added
     { wch: 20 }, // Work log created
     { wch: 20 }, // Work log Time zone
-    { wch: 12 }, // Time spent
-    { wch: 60 }  // Work log comment
+    { wch: 15 }, // Time spent (Hours)
+    { wch: 60 }  // Work Description
   ];
   
   // Add the worksheet to the workbook
