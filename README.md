@@ -1,489 +1,263 @@
-# 📊 Jira Work Log Report Generator
+# JIRA Worklog Reporter 📊
 
-A comprehensive tool to download work log reports from Jira into Excel format.
+A collection of easy-to-use scripts that help you extract worklog data from JIRA and export it to Excel reports. Perfect for project managers, team leads, and administrators who need to track time spent on tasks.
 
-## ✨ Features
+## 📋 What These Scripts Do
 
-- ⭐ **NEW:** JQL-based worklog fetching for custom issue queries
-- ⭐ **NEW:** Fetch worklogs for any specific user by email
-- 📊 Generate Excel reports with summary and detailed views
-- 👥 Support for individual users, teams, or groups
-- 🔍 Custom JQL queries for precise issue targeting
-- 📅 Flexible date range selection (custom or last N days)
-- 🔍 Automatic issue search with multiple JQL strategies
-- 📈 Detailed execution statistics and API call tracking
+### 1. **jira-worklog-fetcher.js** - Team & Individual Reports
+- Get worklogs for a **specific person** by email
+- Get worklogs for an **entire team/group**
+- Get worklogs for **yourself** (the person running the script)
+- Filter by custom date ranges
+- Export to Excel with detailed breakdowns
 
-## 🎯 Use Cases
-
-### User/Group-Based Reports (`jira-worklog-fetcher.js`)
-- **Performance Reviews:** Generate individual employee work log reports
-- **Client Billing:** Track billable hours for specific team members
-- **Team Reports:** Consolidate work logs for entire departments
-- **Personal Tracking:** Export your own work logs for time management
-
-### JQL-Based Reports (`jira-jql-worklog-fetcher.js`)
-- **Project Reports:** All worklogs for a specific project
-- **Epic/Feature Analysis:** Worklogs for issues under a specific epic
-- **Custom Queries:** Complex filtering (e.g., "Fixed issues last sprint")
-- **Issue Lists:** Worklogs for a predefined list of ticket keys
+### 2. **jira-jql-worklog-fetcher.js** - Advanced Query Reports
+- Use **JQL queries** to find specific issues (bugs, tasks, etc.)
+- Get all worklogs from those issues
+- Perfect for project-specific reports
+- Export to Excel with issue summaries
 
 ---
 
-## ✅ What You Need Before Starting
+## 🛠️ Prerequisites (One-time Setup)
 
-1. **Node.js installed** on your computer
-   - Check if installed: Open PowerShell and type `node --version`
-   - If not installed: Download from [nodejs.org](https://nodejs.org/)
+### Step 1: Install Node.js
+1. Go to [nodejs.org](https://nodejs.org/)
+2. Download and install the **LTS version** (recommended for most users)
 
-2. **Jira API Token**
-   - Go to: https://id.atlassian.com/manage-profile/security/api-tokens
-   - Click **"Create API token"**
-   - Give it a name (e.g., "Work Log Reporter")
-   - **Copy the token** - you'll need it in the next step
 
----
-
-## � One-Time Setup
-
-### Step 1: Install Required Packages
-
-Open PowerShell in the `jira-worklog-reports` folder and run:
-
-```powershell
-npm install
-```
-
-### Step 2: Update Your Settings
-
-Open the file **`jira-worklog-fetcher.js`** in any text editor (Notepad works fine).
-
-Find these lines near the top (around line 25-30) and update them:
-
-```javascript
-email: 'your-email@idexcel.com',      // ⚠️ Change to your email
-apiToken: 'YOUR_JIRA_API_TOKEN',      // ⚠️ Paste your API token here
-
-// Choose ONE of the following options:
-specificUserEmail: null,               // Option 1: Specific user email (e.g., 'john.doe@idexcel.com')
-groupName: 'AWS Team',                 // Option 2: Team name (e.g., 'AWS Team')
-useCurrentUser: false,                 // Option 3: Set true for your own worklogs only
-```
-
-**Save the file** after making changes.
-
----
-
-## 🚀 Quick Start Guide
-
-### For a Specific User's Report (Most Common Use Case)
-
-1. **Get the user's email** (e.g., `john.doe@idexcel.com`)
-
-2. **Open `jira-worklog-fetcher.js`** and set:
-   ```javascript
-   specificUserEmail: 'john.doe@idexcel.com',  // ⚠️ Change this
-   groupName: null,                            // Keep null
-   useCurrentUser: false,                      // Keep false
+### Step 2: Install Required Packages
+1. Open **Command Prompt** or **PowerShell**
+2. Navigate to the project folder:
+   ```bash
+   cd "d:\Los repos\cync-los-int-flow-service\jira-worklog-reports"
+   ```
+   ```bash
+   npm install
    ```
 
-3. **Run the script:**
-   ```powershell
-   node jira-worklog-fetcher.js
-   ```
-
-4. **Choose date range** when prompted (or press Enter for last 30 days)
-
-5. **Find your report** in `generated-reports/John_Doe_2025-10-10_14-30-00.xlsx`
-
-### For Your Own Worklogs
-
-1. **Open `jira-worklog-fetcher.js`** and set:
-   ```javascript
-   specificUserEmail: null,      // Keep null
-   groupName: null,              // Keep null
-   useCurrentUser: true,         // ⚠️ Set to true
-   ```
-
-2. **Run:** `node jira-worklog-fetcher.js`
-
-### For a Team/Group Report
-
-1. **Open `jira-worklog-fetcher.js`** and set:
-   ```javascript
-   specificUserEmail: null,           // Keep null
-   groupName: 'AWS Team',             // ⚠️ Set team name
-   useCurrentUser: false,             // Keep false
-   ```
-
-2. **Run:** `node jira-worklog-fetcher.js`
+### Step 3: Get Your JIRA API Token
+1. Log into your JIRA account in a web browser
+2. Go to **Account Settings** → **Security** → **API Tokens**
+3. Click **Create API Token**
+4. Give it a name like "Worklog Reports"
+5. **Copy the token** - you'll need this for the scripts!
 
 ---
 
-## ▶️ How to Run
+## 🚀 How to Use the Scripts
 
-1. Open PowerShell
-2. Navigate to the folder:
-   ```powershell
-   cd "D:\Los repos\cync-los-int-flow-service\jira-worklog-reports"
-   ```
+## Option 1: Team & Individual Reports (`jira-worklog-fetcher.js`)
 
-3. Run the script:
-   ```powershell
-   node jira-worklog-fetcher.js
-   ```
-
-4. **Choose date range:**
-   - Press `1` and Enter for last 30 days (default)
-   - Press `2` and Enter to specify custom dates
-
-5. Wait for the script to complete (usually takes 1-2 minutes)
-
-6. Find your Excel report in the **`generated-reports`** folder
-
----
-
-## 📂 Where to Find Your Report
-
-Your Excel file will be saved in:
-```
-jira-worklog-reports/generated-reports/
-```
-
-File name format: `TeamName_2025-10-09_16-04-16.xlsx`
-
-The Excel file has 2 sheets:
-- **Sheet 1 (Report)**: Summary with total hours per ticket
-- **Sheet 2 (Work logs)**: Detailed entries with all work log details
-
----
-
-## 🎯 What Settings You Can Change
-
-Open `jira-worklog-fetcher.js` and look for the `CONFIG` section:
-
-### Authentication Settings (Required)
-
-| Setting | What It Does | Example |
-|---------|-------------|---------|
-| `email` | Your Jira login email | `john.doe@idexcel.com` |
-| `apiToken` | Your Jira API token (from Step 2 above) | `ATATT3xFfGF0...` |
-
-### Report Scope (Choose ONE)
-
-You must configure **one of these three options** to specify whose worklogs to fetch:
-
-#### Option 1: Specific User by Email ⭐ **NEW**
-Fetch worklogs for **any Jira user** by their email address.
+### Step 1: Configure the Script
+Open `jira-worklog-fetcher.js` in any text editor and update these settings:
 
 ```javascript
-specificUserEmail: 'jane.smith@idexcel.com',  // Set user's email
-groupName: null,                               // Keep null
-useCurrentUser: false,                         // Keep false
-```
-
-**Use this when:** You need a report for a specific team member (e.g., for performance reviews, time tracking verification, or client billing).
-
----
-
-#### Option 2: Your Own Worklogs
-Fetch worklogs for the **currently authenticated user** (the user whose API token you're using).
-
-```javascript
-specificUserEmail: null,     // Keep null
-groupName: null,              // Keep null
-useCurrentUser: true,         // Set to true
-```
-
-**Use this when:** You want to generate your personal work log report.
-
----
-
-#### Option 3: Team/Group Worklogs
-Fetch worklogs for **all members of a Jira group**.
-
-```javascript
-specificUserEmail: null,           // Keep null
-groupName: 'AWS Team',             // Set your team/group name
-useCurrentUser: false,             // Keep false
-```
-
-**Use this when:** You need a consolidated report for an entire team or department.
-
----
-
-## ❓ Troubleshooting
-
-**Problem:** "Cannot find module 'node-fetch'"
-- **Solution:** Run `npm install` in the folder
-
-**Problem:** "Invalid API token"
-- **Solution:** Generate a new token from the link in Step 2 above
-
-**Problem:** "User not found with email: xyz@idexcel.com"
-- **Solution:** 
-  - Verify the email address is spelled correctly
-  - Check that the user exists in your Jira instance
-  - Ensure you have permission to view that user's information
-
-**Problem:** "No issues found"
-- **Solution:** 
-  - For `specificUserEmail`: Verify the user has logged work in the date range
-  - For `groupName`: Check that the team name is spelled correctly (case-sensitive)
-  - Try expanding the date range
-
-**Problem:** Script takes too long
-- **Solution:** This is normal for large teams or long date ranges (100+ issues can take 2-3 minutes)
-
-**Problem:** "Please configure one of: specificUserEmail, useCurrentUser=true, or groupName"
-- **Solution:** You must set **exactly ONE** of these options. Make sure the others are `null` or `false`
-
----
-
-## Help
-
-Check the technical documentation in `RATE-LIMITS.md`
-
----
-
-**Last Updated:** October 9, 2025
-
-## 🎯 Usage Examples
-
-### Example 1: Fetch Specific User's Work Logs
-
-**NEW! Fetch worklogs for any user by their email:**
-```javascript
-specificUserEmail: 'jane.smith@idexcel.com',  // ⚠️ User's email
-groupName: null,
-useCurrentUser: false,
-startDate: getDateDaysAgo(30),
-endDate: getDateDaysAgo(0)
-```
-
-```powershell
-node jira-worklog-fetcher.js
-```
-
-### Example 2: Fetch Current User's Work Logs (Last 30 Days)
-
-**Default configuration** - no changes needed:
-```javascript
-specificUserEmail: null,
-groupName: null,
-useCurrentUser: true,
-startDate: getDateDaysAgo(30),
-endDate: getDateDaysAgo(0)
-```
-
-```powershell
-node jira-worklog-fetcher.js
-```
-
-### Example 3: Fetch Work Logs for a Specific Group
-
-```javascript
-useCurrentUser: false,
-groupName: 'AWS Team',  // Your group name
-startDate: getDateDaysAgo(30),
-endDate: getDateDaysAgo(0)
-```
-
-### Example 4: Custom Date Range (Specific Dates)
-
-```javascript
-specificUserEmail: 'john.doe@idexcel.com',
-startDate: '2025-09-01',  // September 1, 2025
-endDate: '2025-09-30',    // September 30, 2025
-```
-
-### Example 5: Last Quarter (90 days)
-
-```javascript
-startDate: getDateDaysAgo(90),
-endDate: getDateDaysAgo(0)
-```
-
-## 📊 Output
-
-### Console Output
-The script displays:
-- Summary statistics (total time, issues, team members)
-- Detailed work logs grouped by issue
-- Time spent per issue and per person
-
-Example:
-```
-================================================================================
-📊 JIRA WORK LOG REPORT
-================================================================================
-
-📈 SUMMARY:
-   Date Range: 2025-09-08 to 2025-10-08
-   Total Work Logs: 45
-   Total Time Logged: 78h 30m (78.50 hours)
-   Unique Issues: 12
-   Team Members: 5
-
-📋 DETAILED WORK LOGS:
---------------------------------------------------------------------------------
-
-🎫 CA-179 - Implement user authentication
-   Type: Story | Project: CA | Total: 8.00h
-   ├─ John Doe logged 3h on 2025-10-01
-   ├─ Jane Smith logged 5h on 2025-10-02
-```
-
-### JSON File Output
-The script also saves a detailed JSON report to `jira-worklogs-report.json`:
-
-```json
-{
-  "summary": {
-    "totalWorkLogs": 45,
-    "totalTimeSeconds": 282600,
-    "totalTimeFormatted": "78h 30m",
-    "totalTimeHours": "78.50",
-    "dateRange": {
-      "start": "2025-09-08",
-      "end": "2025-10-08"
-    },
-    "uniqueIssues": ["CA-179", "CA-205", ...],
-    "issueCount": 12,
-    "authorCount": 5
-  },
-  "workLogs": [
-    {
-      "issueKey": "CA-179",
-      "issueType": "Story",
-      "issueSummary": "Implement user authentication",
-      "projectKey": "CA",
-      "author": "John Doe",
-      "authorEmail": "john@example.com",
-      "timeSpent": "3h",
-      "timeSpentSeconds": 10800,
-      "timeSpentHours": "3.00",
-      "date": "2025-10-01",
-      "started": "2025-10-01T10:30:00.000+0530",
-      "comment": "Worked on OAuth integration"
-    }
-  ]
+const CONFIG = {
+  // Your JIRA instance URL
+  jiraBaseUrl: 'https://idexcel.atlassian.net',  // Change this to your JIRA URL
+  
+  // Your credentials
+  email: 'your.email@company.com',  // ← Replace with your email
+  apiToken: 'ATATT3xFfGF0...',      // ← Replace with your API token
+  
+  // Choose ONE of these options:
+  
+  // Option A: Get worklogs for a specific person
+  specificUserEmail: 'john.doe@company.com',  // ← Person's email
+  groupName: null,
+  useCurrentUser: false,
+  
+  // Option B: Get worklogs for an entire team
+  specificUserEmail: null,
+  groupName: "AWS Team",  // ← Your team/group name in JIRA
+  useCurrentUser: false,
+  
+  // Option C: Get worklogs for yourself only
+  specificUserEmail: null,
+  groupName: null,
+  useCurrentUser: true,  // ← Set to true
 }
 ```
 
-## 🔧 Configuration Options
-
-| Option | Type | Description | Default |
-|--------|------|-------------|---------|
-| `jiraBaseUrl` | string | Your Jira instance URL | `https://idexcel.atlassian.net` |
-| `email` | string | Your Jira account email | ⚠️ **Required** |
-| `apiToken` | string | Your Jira API token | ⚠️ **Required** |
-| `specificUserEmail` | string\|null | Email of specific user to fetch worklogs for | `null` |
-| `groupName` | string\|null | Jira group name or null | `null` |
-| `useCurrentUser` | boolean | Use current user instead of group | `false` |
-| `startDate` | string | Start date (YYYY-MM-DD) | 30 days ago |
-| `endDate` | string | End date (YYYY-MM-DD) | Today |
-| `maxResultsPerPage` | number | Pagination size | `100` |
-| `saveToFile` | boolean | Save JSON report to file | `true` |
-| `outputFileName` | string | Output file name | `'jira-worklogs-report.json'` |
-
+### Step 2: Run the Script
+1. Open **Command Prompt** or **PowerShell**
+2. Navigate to the project folder:
+   ```bash
+   cd "d:\Los repos\cync-los-int-flow-service\jira-worklog-reports"
+   ```
+3. Run the script:
+   ```bash
+   node jira-worklog-fetcher.js
+   ```
+4. Follow the prompts to select your date range
+5. Wait for the script to complete
+6. Find your Excel report in the `generated-reports` folder!
 
 ---
 
-## 🔍 JQL-Based Worklog Fetcher (NEW!)
+## Option 2: Advanced Query Reports (`jira-jql-worklog-fetcher.js`)
 
-For more advanced use cases, use the **`jira-jql-worklog-fetcher.js`** script.
-
-### 🎯 When to Use This Script
-
-- You have a specific list of issues (tickets) you want worklog data for
-- You need worklogs for a complex query (e.g., "all issues in Epic XYZ that were resolved last month")
-- You want worklogs from a specific project, regardless of who logged the time
-- You need worklogs for issues matching custom criteria
-
-### ⚡ Quick Start
-
-1. **Configure your credentials** in `jira-jql-worklog-fetcher.js`:
-   ```javascript
-   const CONFIG = {
-     email: 'your.email@company.com',     // Your email
-     apiToken: 'ATATT3xFfGF0...',         // Your API token
-     jqlQuery: 'project = "MY_PROJECT" AND status = "Done"',  // Your JQL
-   ```
-
-2. **Run the script**:
-   ```powershell
-   node jira-jql-worklog-fetcher.js
-   ```
-
-3. **Choose your JQL**: You can either use the JQL from the config or enter a custom one when prompted.
-
-### 📝 JQL Query Examples
-
-| Use Case | JQL Example |
-|----------|-------------|
-| **Specific Issues** | `key in (PROJ-123, PROJ-456, PROJ-789)` |
-| **Project Issues** | `project = "MY_PROJECT" AND status = "Done"` |
-| **Epic Issues** | `"Epic Link" = PROJ-100` |
-| **Recent Issues** | `updated >= -30d AND assignee = currentUser()` |
-| **Sprint Issues** | `project = "SCRUM" AND sprint = "Sprint 45"` |
-| **Component Issues** | `project = "WEB" AND component = "Frontend"` |
-
-### 🎛️ Optional Filters
-
-You can add additional filters in the CONFIG:
+### Step 1: Configure the Script
+Open `jira-jql-worklog-fetcher.js` in any text editor and update these settings:
 
 ```javascript
-// Filter worklogs by date (optional)
+const CONFIG = {
+  // Your JIRA instance URL
+  jiraBaseUrl: 'https://idexcel.atlassian.net',  // Change this to your JIRA URL
+  
+  // Your credentials
+  email: 'your.email@company.com',  // ← Replace with your email
+  apiToken: 'ATATT3xFfGF0...',      // ← Replace with your API token
+  
+  // Your JQL query - examples below:
+  jqlQuery: 'project = "LOS " AND issuetype in (Bug) AND assignee is EMPTY',
+}
+```
+
+### Common JQL Query Examples:
+```javascript
+// All bugs in a specific project
+jqlQuery: 'project = "MY_PROJECT" AND issuetype = Bug'
+
+// All tasks assigned to you
+jqlQuery: 'assignee = currentUser() AND issuetype = Task'
+
+// All issues updated in the last 30 days
+jqlQuery: 'updated >= -30d'
+
+// Specific issues by key
+jqlQuery: 'key in (PROJ-123, PROJ-456, PROJ-789)'
+
+// All issues in an epic
+jqlQuery: '"Epic Link" = PROJ-100'
+
+// Issues assigned to no one
+jqlQuery: 'assignee is EMPTY AND project = "MY_PROJECT"'
+```
+
+### Step 2: Run the Script
+1. Open **Command Prompt** or **PowerShell**
+2. Navigate to the project folder:
+   ```bash
+   cd "d:\Los repos\cync-los-int-flow-service\jira-worklog-reports"
+   ```
+3. Run the script:
+   ```bash
+   node jira-jql-worklog-fetcher.js
+   ```
+4. Choose to use your configured query or enter a custom one
+5. Wait for the script to complete
+6. Find your Excel report in the `generated-reports` folder!
+
+---
+
+## 📊 Understanding Your Excel Reports
+
+### Team/Individual Reports Structure:
+- **Sheet 1 "Report"**: Summary by issue with total hours per issue
+- **Sheet 2 "Work logs"**: Detailed entries with who logged what when
+
+### JQL Query Reports Structure:
+- **Sheet 1 "All Issues"**: All issues found (including ones with no worklogs)
+- **Sheet 2 "Work logs"**: Detailed worklog entries
+
+---
+
+## ⚙️ Advanced Configuration Options
+
+### Date Range Settings
+```javascript
+// Use specific dates
+startDate: '2025-01-01',  // YYYY-MM-DD format
+endDate: '2025-01-31',
+
+// Or use relative dates
+startDate: getDateDaysAgo(30),  // 30 days ago
+endDate: getDateDaysAgo(0),     // Today
+```
+
+### Filter Options (JQL Script Only)
+```javascript
+// Filter worklogs by date (even if issue was created earlier)
 dateFilter: {
   enabled: true,
   startDate: '2025-09-01',
   endDate: '2025-10-16'
 },
 
-// Filter worklogs by specific authors (optional)
+// Filter worklogs by specific people
 authorFilter: {
   enabled: true,
   authorEmails: ['user1@company.com', 'user2@company.com']
 }
 ```
 
-### 📊 Output
-
-- **Console**: Detailed breakdown by issue and author
-- **Excel**: Same 2-sheet format as the main script
-- **Filename**: `Project_NAME_2025-10-16_14-30-45.xlsx`
+### Performance Settings (for large teams)
+```javascript
+// For teams with 50+ people or 2000+ tickets
+enableBatchProcessing: true,
+batchSize: 200,           // Process 200 issues at a time
+batchDelayMs: 1000,       // Wait 1 second between batches
+maxIssuesToProcess: 5000, // Safety limit
+```
 
 ---
 
-## 🐛 Troubleshooting
+## 🚨 Troubleshooting
 
-### Error: "Please update CONFIG.apiToken"
-- You need to set your actual Jira API token in the CONFIG section
+### "Authentication failed" or "401 Unauthorized"
+- Double-check your email and API token are correct
+- Make sure your API token hasn't expired
+- Verify your JIRA base URL is correct
 
-### Error: "Jira API Error (401)"
-- Check your email and API token are correct
-- Ensure you have permission to access the Jira instance
+### "User not found" or "Group not found"
+- Check the spelling of email addresses or group names
+- Group names are case-sensitive
+- Make sure the person has access to JIRA
 
-### Error: "Jira API Error (404)"
-- Verify the group name exists and you have access to it
-- Check the Jira base URL is correct
+### "No issues found" or "No worklogs found"
+- Try expanding your date range
+- Check if the issues actually have worklogs in that time period
+- For JQL queries, test your query in JIRA's issue search first
 
-### No work logs found
-- Verify the date range contains work logs
-- Check that the user/group members have logged work in Jira
-- Ensure the group name is spelled correctly
+### Script runs but Excel file is empty
+- The date range might not match when work was actually logged
+- Team members might not have logged time in that period
+- Check the console output for filtering information
 
-## 📚 API References
+### "Rate limit exceeded"
+- The script will automatically retry, just wait
+- For large teams, enable batch processing in the config
+- Consider running during off-peak hours
 
-- [Jira Cloud REST API Documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/)
-- [Get Group Members](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-groups/#api-rest-api-3-group-member-get)
-- [Search Issues (JQL)](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/#api-rest-api-3-search-post)
-- [Get Issue Work Logs](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-worklogs/)
+### "Module not found" errors
+- Make sure you ran `npm install node-fetch xlsx readline`
+- Try running as Administrator
+- Restart your command prompt after installing Node.js
 
-## 📝 Notes
+---
 
-- The script uses JQL (Jira Query Language) to efficiently search for issues
-- Work logs are filtered on both the server side (JQL) and client side (for accuracy)
-- Pagination is handled automatically for large result sets
-- All times are displayed in both human-readable format (e.g., "3h 30m") and decimal hours
+## 📁 File Locations
+
+- **Scripts**: Main project folder
+- **Excel Reports**: `generated-reports/` folder
+- **Report Names**: 
+  - Team reports: `GroupName_YYYY-MM-DD_HH-MM-SS.xlsx`
+  - JQL reports: `Project_Name_YYYY-MM-DD_HH-MM-SS.xlsx`
+
+
+---
+
+## 📋 Quick Start Checklist
+
+- [ ] Node.js installed
+- [ ] Packages installed (`npm install node-fetch xlsx readline`)
+- [ ] JIRA API token created
+- [ ] Script configured with your credentials
+- [ ] Email/group name/JQL query set correctly
+- [ ] Date range configured
+- [ ] Ready to run!
+
+Happy reporting! 📈
 
