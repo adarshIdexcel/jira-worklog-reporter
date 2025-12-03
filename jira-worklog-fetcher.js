@@ -46,7 +46,7 @@ const CONFIG = {
   specificUserEmail: null,  // e.g., 'john.doe@idexcel.com' or null
   
   // Option 2: Team/Group
-  groupName: "AWS Team",  // e.g., 'AWS Team' or null
+  groupName: "Cync LOS",  // e.g., 'AWS Team' or null
   
   // Option 3: Current authenticated user
   useCurrentUser: false,  // Set to true to fetch only your own worklogs
@@ -63,6 +63,9 @@ const CONFIG = {
   maxResultsPerPage: 500,
   maxIssuesToProcess: 3000,  // Increased for larger groups (60 people, 2500+ tickets)
   maxWorklogsPerIssue: 10000, // Safety limit for issues with excessive worklogs
+  
+  // JQL Query Optimization (NEW)
+  maxUsersPerJqlQuery: 50,      // Max users per JQL query to avoid 413 errors (reduce if still getting errors)
   
   // Batch Processing (for groups only)
   enableBatchProcessing: true,      // Enable batch processing for large groups
@@ -411,55 +414,117 @@ async function searchIssuesWithWorkLogs(accountIds, startDate, endDate) {
   console.log(`   Date range: ${startDate} to ${endDate}`);
   console.log(`   Users: ${accountIds.length} account(s)`);
   
-  // Build JQL query - use a broader search first, then filter by date when fetching work logs
-  // Note: worklogDate JQL function may not work reliably in all Jira instances
-  const accountIdsJql = accountIds.map(id => `"${id}"`).join(', ');
-  
-  // Try multiple JQL strategies
-  let jql;
+  // For large groups (>MAX_USERS_PER_QUERY users), split into batches to avoid 413 errors
+  const MAX_USERS_PER_QUERY = CONFIG.maxUsersPerJqlQuery;
   let allIssues = [];
   let strategyUsed = "none";
   
-  // Strategy 1: Try with worklogDate (may not work in all instances)
-  try {
-    jql = `worklogDate >= "${startDate}" AND worklogDate <= "${endDate}" AND worklogAuthor in (${accountIdsJql}) ORDER BY updated DESC`;
-    console.log(`   Trying JQL Strategy 1 (with worklogDate):`);
-    console.log(`   JQL: ${jql.substring(0, 120)}...`);
-    allIssues = await executeJQLSearch(jql);
-    console.log(`   ✅ Strategy 1 result: ${allIssues.length} issues found\n`);
-    strategyUsed = "worklogDate + worklogAuthor";
-  } catch (error) {
-    console.log(`   ⚠️  Strategy 1 failed: ${error.message}`);
-    console.log(`   Trying alternative strategy...\n`);
-  }
-  
-  // Strategy 2: Broader search - just worklogAuthor, filter by date later
-  if (allIssues.length === 0) {
+  if (accountIds.length > MAX_USERS_PER_QUERY) {
+    console.log(`   ⚠️  Large group detected (${accountIds.length} users). Using batched search to avoid 413 errors...`);
+    console.log(`   📊 Splitting into batches of ${MAX_USERS_PER_QUERY} users each\n`);
+    
+    // Split accountIds into batches
+    const batches = [];
+    for (let i = 0; i < accountIds.length; i += MAX_USERS_PER_QUERY) {
+      batches.push(accountIds.slice(i, i + MAX_USERS_PER_QUERY));
+    }
+    
+    console.log(`   📦 Processing ${batches.length} batches...\n`);
+    
+    // Process each batch
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      const accountIdsJql = batch.map(id => `"${id}"`).join(', ');
+      
+      console.log(`   📦 Batch ${batchIndex + 1}/${batches.length} (${batch.length} users):`);
+      
+      let batchIssues = [];
+      
+      // Try Strategy 1 for this batch
+      try {
+        const jql = `worklogDate >= "${startDate}" AND worklogDate <= "${endDate}" AND worklogAuthor in (${accountIdsJql}) ORDER BY updated DESC`;
+        console.log(`      Trying Strategy 1 (worklogDate)...`);
+        batchIssues = await executeJQLSearch(jql);
+        console.log(`      ✅ Found ${batchIssues.length} issues`);
+        if (strategyUsed === "none") strategyUsed = "worklogDate + worklogAuthor (batched)";
+      } catch (error) {
+        console.log(`      ⚠️  Strategy 1 failed: ${error.message.substring(0, 100)}`);
+        
+        // Try Strategy 2 for this batch
+        try {
+          const jql = `worklogAuthor in (${accountIdsJql}) ORDER BY updated DESC`;
+          console.log(`      Trying Strategy 2 (worklogAuthor only)...`);
+          batchIssues = await executeJQLSearch(jql);
+          console.log(`      ✅ Found ${batchIssues.length} issues`);
+          if (strategyUsed === "none") strategyUsed = "worklogAuthor only (batched)";
+        } catch (error2) {
+          console.log(`      ⚠️  Strategy 2 failed: ${error2.message.substring(0, 100)}`);
+        }
+      }
+      
+      // Merge batch results (deduplicate by issue key)
+      const existingKeys = new Set(allIssues.map(issue => issue.key));
+      const newIssues = batchIssues.filter(issue => !existingKeys.has(issue.key));
+      allIssues = allIssues.concat(newIssues);
+      
+      console.log(`      📊 Batch total: ${batchIssues.length} issues, ${newIssues.length} new (cumulative: ${allIssues.length})\n`);
+      
+      // Add delay between batches to avoid rate limiting
+      if (batchIndex < batches.length - 1) {
+        await sleep(500); // 500ms delay between batches
+      }
+    }
+    
+    console.log(`   ✅ Batched search complete: ${allIssues.length} unique issues found\n`);
+  } else {
+    // Original logic for small groups (≤50 users)
+    const accountIdsJql = accountIds.map(id => `"${id}"`).join(', ');
+    let jql;
+    
+    // Strategy 1: Try with worklogDate (may not work in all instances)
     try {
-      jql = `worklogAuthor in (${accountIdsJql}) ORDER BY updated DESC`;
-      console.log(`   Trying JQL Strategy 2 (broader search):`);
+      jql = `worklogDate >= "${startDate}" AND worklogDate <= "${endDate}" AND worklogAuthor in (${accountIdsJql}) ORDER BY updated DESC`;
+      console.log(`   Trying JQL Strategy 1 (with worklogDate):`);
       console.log(`   JQL: ${jql.substring(0, 120)}...`);
       allIssues = await executeJQLSearch(jql);
-      console.log(`   ✅ Strategy 2 result: ${allIssues.length} issues found\n`);
-      strategyUsed = "worklogAuthor only";
+      console.log(`   ✅ Strategy 1 result: ${allIssues.length} issues found\n`);
+      strategyUsed = "worklogDate + worklogAuthor";
     } catch (error) {
-      console.log(`   ⚠️  Strategy 2 failed: ${error.message}`);
+      console.log(`   ⚠️  Strategy 1 failed: ${error.message}`);
+      console.log(`   Trying alternative strategy...\n`);
     }
-  }
-  
-  // Strategy 3: Even broader - issues updated in the date range where user might have logged work
-  if (allIssues.length === 0) {
-    try {
-      jql = `updated >= "${startDate}" AND updated <= "${endDate}" ORDER BY updated DESC`;
-      console.log(`   Trying JQL Strategy 3 (updated date range):`);
-      console.log(`   JQL: ${jql}`);
-      allIssues = await executeJQLSearch(jql);
-      console.log(`   ✅ Strategy 3 result: ${allIssues.length} issues found`);
-      console.log(`   ℹ️  Note: Will filter work logs by author and date later\n`);
-      strategyUsed = "updated date range";
-    } catch (error) {
-      console.log(`   ⚠️  Strategy 3 failed: ${error.message}`);
-      console.log(`   No issues found with any search strategy\n`);
+    
+    // Strategy 2: Broader search - just worklogAuthor, filter by date later
+    if (allIssues.length === 0) {
+      try {
+        jql = `worklogAuthor in (${accountIdsJql}) ORDER BY updated DESC`;
+        console.log(`   Trying JQL Strategy 2 (broader search):`);
+        console.log(`   JQL: ${jql.substring(0, 120)}...`);
+        allIssues = await executeJQLSearch(jql);
+        console.log(`   ✅ Strategy 2 result: ${allIssues.length} issues found\n`);
+        strategyUsed = "worklogAuthor only";
+      } catch (error) {
+        console.log(`   ⚠️  Strategy 2 failed: ${error.message}`);
+      }
+    }
+    
+    // Strategy 3: Even broader - issues updated in the date range where user might have logged work
+    // NOTE: This strategy is UNRELIABLE for large groups and should only be used as last resort
+    if (allIssues.length === 0) {
+      try {
+        jql = `updated >= "${startDate}" AND updated <= "${endDate}" ORDER BY updated DESC`;
+        console.log(`   Trying JQL Strategy 3 (updated date range):`);
+        console.log(`   ⚠️  WARNING: This strategy may miss data for large groups!`);
+        console.log(`   JQL: ${jql}`);
+        allIssues = await executeJQLSearch(jql);
+        console.log(`   ✅ Strategy 3 result: ${allIssues.length} issues found`);
+        console.log(`   ⚠️  IMPORTANT: Results may be incomplete - only ${allIssues.length} issues checked out of potentially thousands`);
+        console.log(`   ℹ️  Note: Will filter work logs by author and date later\n`);
+        strategyUsed = "updated date range (UNRELIABLE - may miss data)";
+      } catch (error) {
+        console.log(`   ⚠️  Strategy 3 failed: ${error.message}`);
+        console.log(`   No issues found with any search strategy\n`);
+      }
     }
   }
   
